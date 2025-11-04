@@ -1,0 +1,3 @@
+[submodule "cw1/lib/sdp_2023"]
+	path = cw1/lib/sdp_2023
+	url = git@github.com:BorisVassilev1/sdp_2023.git
