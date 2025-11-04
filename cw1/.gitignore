@@ -1,0 +1,8 @@
+test-constexpr.cpp
+build/
+tests/
+temp/
+tools/*
+!tools/build.sh
+!tools/clean.sh
+!tools/CMakeLists.txt
