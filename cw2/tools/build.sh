@@ -11,10 +11,8 @@ cmake_args=(
   -DANTLR4_RUNTIME_INCLUDE_DIR=/usr/local/include/antlr4-runtime
   -DANTLR4_RUNTIME_LIBRARY=/usr/local/lib/libantlr4-runtime.a
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-  -DCMAKE_CXX_COMPILER=clang++
-  -DCMAKE_C_COMPILER=clang
 )
 
 cmake "${cmake_args[@]}"
 
-cmake --build "${build_dir}" "--parallel" "$@"
+cmake --build "${build_dir}" "--parallel" --target parser

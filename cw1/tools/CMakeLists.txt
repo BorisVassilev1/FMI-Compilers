@@ -16,22 +16,29 @@ set(BUILD_DIR "${PROJECT_ROOT}/build")
 set(DRIVERS_DIR "${SRC_DIR}/drivers")
 set(LIB_DIR "${PROJECT_ROOT}/lib")
 
-add_executable(lexer ${DRIVERS_DIR}/LexerDriver.cpp)
+set(COMPILER_FLAGS 
+	-g -Wall -Wextra -Wpedantic -std=c++26
+	#-fconcepts-diagnostics-depth=4
+	-DROOT_DIR="${PROJECT_ROOT}" -fPIC
+)
+
 
 add_subdirectory(${LIB_DIR}/sdp_2023 sdp_2023_build)
 
+add_executable(lexer ${DRIVERS_DIR}/LexerDriver.cpp ${SRC_DIR}/coolLexer.cpp)
 target_link_libraries(lexer PRIVATE lang)
-target_include_directories(lexer PRIVATE
-	${LIB_DIR}/sdp_2023/
-)
-
+target_include_directories(lexer PRIVATE ${LIB_DIR}/sdp_2023/)
 set_target_properties(lexer PROPERTIES
   RUNTIME_OUTPUT_DIRECTORY "${BUILD_DIR}"
 )
+target_compile_options(lexer PRIVATE ${COMPILER_FLAGS})
 
-target_compile_options(lexer PRIVATE 
-	-g -Wall -Wextra -Wpedantic -std=c++26
-	#-fconcepts-diagnostics-depth=4
-	-DROOT_DIR="${PROJECT_ROOT}"
-	-stdlib=libstdc++
+
+add_library(CoolLexer STATIC ${SRC_DIR}/coolLexer.cpp)
+target_link_libraries(CoolLexer PRIVATE lang)
+target_include_directories(CoolLexer PRIVATE ${LIB_DIR}/sdp_2023/)
+set_target_properties(CoolLexer PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY "${BUILD_DIR}"
 )
+target_compile_options(CoolLexer PRIVATE ${COMPILER_FLAGS} -fPIC -DDBG_LOG_LEVEL=2)
+
