@@ -2,7 +2,9 @@
 #include <filesystem>
 #include <iostream>
 #include <fstream>
+#include <memory>
 #include "DPDA/cfg.h"
+#include "DPDA/parser.h"
 #include "DPDA/token.h"
 
 #define DBG_LOG_LEVEL 2
@@ -51,9 +53,9 @@ auto createParser() {
 	auto Class = Seq<Token>(class_,
 		CLASS,
 		TYPEID,
-		Optional<Token>(NT(), Word<Token>(NT(), {INHERITS, TYPEID})),
+		Optional<Token>(NT(), Production<Token>({INHERITS, TYPEID})),
 		Token('{'),
-		Repeat<Token>(NT(), feature, -1),
+		Repeat<Token>(NT(), Production<Token>({feature, Token(';')}), -1),
 		Token('}'),
 		Token(';')
 	);
@@ -67,8 +69,10 @@ auto createParser() {
 		OBJECTID,
 		Choice<Token>(NT(),
 			Seq<Token>(NT(),
-				Token('('), formal,
-					Repeat<Token>(NT(), Seq<Token>(NT(), Token(','), formal), -1),
+				Token('('), Optional<Token>(NT(), Seq<Token>(NT(),
+					formal,
+					Repeat<Token>(NT(), Seq<Token>(NT(), Token(','), formal), -1))
+				),
 				Token(')'), Token(':'), TYPEID, Token('{'), expr, Token('}')
 			),
 			Seq<Token>(NT(), Token(':'), TYPEID, Optional<Token>(NT(), Production<Token>({ASSIGN, expr})))
@@ -97,12 +101,13 @@ auto createParser() {
 			Token('}')
 		),
 		Seq<Token>(NT(),
-			LET, init, Repeat<Token>(NT(), Production<Token>({Token(','), init})), IN, expr
+			LET, init, Repeat<Token>(NT(), Production<Token>({Token(','), init})), IN, expr, Token(';') // this ; is important?
 		),
 		Seq<Token>(NT(),
 			CASE, expr, OF, caseLine, Repeat<Token>(NT(), caseLine), ESAC
 		),
 		Production<Token>({NEW, TYPEID}),
+		Production<Token>({Token('('), expr, Token(')')}),
 		INT_CONST,
 		STR_CONST,
 		BOOL_CONST_FALSE,
@@ -110,16 +115,13 @@ auto createParser() {
 	);
 
 	current = assignexpr;
-	auto AssignExpr = Choice<Token>(assignexpr,
-		Seq<Token>(NT(),
+	auto AssignExpr = Seq<Token>(assignexpr,
 			OBJECTID,
 			Choice<Token>(NT(),
 				Production<Token>({ASSIGN, assignexpr}),
 				finish_expr
 			)
-		),
-		NONID_expr
-	);
+		);
 
 	current = finish_expr;
 	auto FinishExpr = Choice<Token>(finish_expr,
@@ -131,8 +133,8 @@ auto createParser() {
 
 	current = expr;
 	auto Expr = Choice<Token>(expr,
-		Seq<Token>(NT(), arithexpr, finish_expr),
-		NONID_Expr
+		assignexpr,
+		NONID_expr
 	);
 
 	current = finish_aexpr;
@@ -154,7 +156,7 @@ auto createParser() {
 	auto ArithExpr = Seq<Token>(arithexpr, term, finish_aexpr);
 
 	current = finish_term;
-	auto FinishTerm = RepeatChoice(finish_term,
+	auto FinishTerm = Choice(finish_term,
 		Production<Token>({Token('*'), isvoidexpr}),
 		Production<Token>({Token('/'), isvoidexpr})
 	);
@@ -171,42 +173,54 @@ auto createParser() {
 	current = neighexpr;
 	auto NeighExpr = Choice<Token>(neighexpr,
 		Production<Token>({Token('~'), NONID_expr}),
-		NONID_expr
+		NONID_expr,
+		OBJECTID
 	);
 
 	// clang-format on
 
-	auto g = Combine<Token>(Program, Class, Feature, Formal, FinishExpr, Expr, AssignExpr, ArithExpr, Term,
-							IsVoidExpr, NeighExpr, FinishTerm, FinishAExpr, CaseLine, NONID_Expr, Init);
-	g.printRules();
-	g.printParseTable();
-	return Parser<Token>(g);
+	auto g = Combine<Token>(Program, Class, Feature, Formal, FinishExpr, Expr, AssignExpr, ArithExpr, Term, IsVoidExpr,
+							NeighExpr, FinishTerm, FinishAExpr, CaseLine, NONID_Expr, Init);
+	// g.printRules();
+	// g.printParseTable();
+	auto p = Parser<Token>(g);
+	//std::cout << p.getFirst() << std::endl;
+	std::cout << p.getFollow() << std::endl;
+	//std::cout << p.getNullable() << std::endl;
+
+	return p;
 }
 
 namespace fs = std::filesystem;
 
 int main(int argc, const char *argv[]) {
-	if (argc != 2) {
-		std::cerr << "Expecting exactly one argument: name of input file" << std::endl;
-		return 1;
-	}
-
-	auto		  file_path = argv[1];
-	std::ifstream fin(file_path);
-
-	auto file_name = fs::path(file_path).filename().string();
-
+	std::unique_ptr<Parser<Token>> p;
 	try {
-		auto g = createParser();
+		p = std::make_unique<Parser<Token>>(createParser());
 	} catch (std::exception &e) {
 		std::cerr << "Error creating parser: " << e << std::endl;
 		return 1;
 	}
 
-	auto lex = createCoolLexer(fin);
+	if (argc != 2) {
+		std::cerr << "Expecting exactly one argument: name of input file" << std::endl;
+		return 1;
+	}
+	auto		  file_path = argv[1];
+	std::ifstream fin(file_path);
+
+	auto file_name = fs::path(file_path).filename().string();
+
+	auto			   lex = createCoolLexer(fin);
+	std::vector<Token> tokens;
 	for (auto [token, from, to, line, str] : lex) {
 		std::cout << token << " " << from << " " << to << " " << line << " " << std::endl;
+		if (token != WS && token != COMMENT_MULTI) tokens.push_back(token);
 	}
+	tokens.push_back(Token::eof);
+
+	auto t = p->parse(tokens);
+	std::cout << t << std::endl;
 
 	return 0;
 }
